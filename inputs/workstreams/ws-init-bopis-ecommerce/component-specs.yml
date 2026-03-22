@@ -1,0 +1,95 @@
+version: '0.1'
+domain: ecommerce
+domain_id: ecommerce
+domain_name: Ecommerce Domain
+description: Ecommerce domain manages product catalog, store location search, and
+  BOPIS inventory visibility for online customers. Integrates with HCL Commerce platform
+  to provide product data and store inventory information.
+owner:
+  name: Zhong
+  role: Technical Lead
+  team: Engineering
+components:
+- id: comp-ecommerce-catalog
+  name: Product Catalog Service
+  description: Manages product catalog data and provides store-level inventory visibility.
+    Integrates with HCL Commerce for product data and with Inventory domain for real-time
+    availability.
+  type: stateless
+  external_dependencies:
+  - name: HCL Commerce Platform
+    purpose: Product catalog fetch, inventory query
+    protocol: REST
+    availability_sla: 95.0%
+  provided_interfaces:
+  - ifc-product-catalog-api
+  - ifc-store-locator-api
+  - ifc-inventory-visibility-api
+  consumed_interfaces:
+  - ifc-inventory-sync-event
+  dependencies:
+  - interface_id: ifc-inventory-sync-event
+    owner_domain: inventory
+    required_before: implementation
+    component_id: comp-inventory-management
+  nfr_slo:
+    availability: 99.5%
+    latency_p95_ms: 200
+    throughput_rps: 500
+    error_budget: 1.0%
+  data_entities:
+  - Product
+  - Store
+  - Store Inventory
+  observability:
+    metrics:
+    - catalog_request_latency
+    - inventory_query_latency
+    - store_lookup_error_rate
+    logs:
+    - Product catalog access logs
+    - Inventory sync event logs
+    traces:
+    - Product fetch traces
+    - Store lookup traces
+  deployment:
+    replicas: 3
+    resource_limits:
+      cpu: 2 vCPU
+      memory: 4Gi
+      storage: 10Gi
+    environment: production
+  security:
+    authentication: JWT
+    authorization: Role-based (Customer, Associate, Admin)
+    data_encryption: TLS 1.3 in transit, AES-256 at rest
+    compliance: PCI DSS, GDPR
+  scaling:
+    min_replicas: 2
+    max_replicas: 10
+    auto_scaling_trigger: CPU > 70% for 5 minutes
+integration_patterns:
+- pattern: async_event
+  source: inventory
+  target: ecommerce
+  interface: ifc-inventory-sync-event
+  resiliency:
+    retries: 3
+    backoff: exponential
+    dead_letter_queue: true
+  data_contract:
+    version: 0.1.0
+    backward_compatible: true
+external_integrations:
+- system: HCL Commerce Platform
+  purpose: Product catalog and inventory data
+  protocol: REST
+  auth: API_KEY
+  rate_limit: 500 rps
+  timeout: 5000ms
+  circuit_breaker: true
+  notes: HCL Commerce provides authoritative product catalog and store inventory data
+open_questions: []
+notes: Ecommerce domain is customer-facing and requires high availability and low
+  latency. Integration with HCL Commerce is critical for product data. Event-driven
+  inventory sync ensures real-time visibility.
