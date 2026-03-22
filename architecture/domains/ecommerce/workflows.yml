@@ -1,0 +1,429 @@
+version: "0.1"
+
+workflows:
+  - id: WF-BOPIS-001
+    name: BOPIS Order Fulfillment
+    description: Complete workflow for Buy Online Pick Up In Store order processing
+    type: business_process
+    trigger:
+      event: order_created
+      condition: order.fulfillment_method == BOPIS
+    steps:
+      - step_id: 1
+        name: Validate Inventory
+        type: validation
+        description: Check inventory availability at selected store
+        service: InventoryService
+        operation: checkAvailability
+        inputs:
+          - product_id
+          - quantity
+          - location_id
+        outputs:
+          available: boolean
+        on_failure: notify_customer_insufficient_inventory
+
+      - step_id: 2
+        name: Reserve Inventory
+        type: reservation
+        description: Reserve inventory at store location
+        service: InventoryService
+        operation: reserveInventory
+        inputs:
+          - order_id
+          - product_id
+          - quantity
+          - location_id
+        outputs:
+          reservation_id: string
+        on_failure: cancel_order
+
+      - step_id: 3
+        name: Assign Pickup Slot
+        type: scheduling
+        description: Find and assign available pickup slot
+        service: BOPISManagementService
+        operation: assignPickupSlot
+        inputs:
+          - order_id
+          - store_id
+          - customer_preferred_date
+        outputs:
+          pickup_slot_id: string
+          pickup_time: timestamp
+        on_failure: offer_alternate_slots
+
+      - step_id: 4
+        name: Confirm Order
+        type: notification
+        description: Send order confirmation with pickup details
+        service: OrderManagementService
+        operation: confirmOrder
+        inputs:
+          - order_id
+          - pickup_slot_id
+        outputs:
+          confirmation_number: string
+        on_failure: rollback_inventory
+
+      - step_id: 5
+        name: Notify Store
+        type: notification
+        description: Alert store staff about new BOPIS order
+        service: BOPISManagementService
+        operation: notifyStore
+        inputs:
+          - order_id
+          - store_id
+          - pickup_time
+        outputs: {}
+
+      - step_id: 6
+        name: Prepare Order
+        type: fulfillment
+        description: Store staff picks and prepares order
+        service: BOPISManagementService
+        operation: markOrderPrepared
+        inputs:
+          - order_id
+        triggers:
+          event: store_prepared_order
+
+      - step_id: 7
+        name: Customer Pickup
+        type: fulfillment
+        description: Customer collects order at store
+        service: BOPISManagementService
+        operation: confirmPickup
+        inputs:
+          - order_id
+          - customer_verification
+        outputs:
+          pickup_confirmed: boolean
+        on_failure: escalate_store_manager
+
+      - step_id: 8
+        name: Complete Order
+        type: completion
+        description: Finalize order and update inventory
+        service: OrderManagementService
+        operation: completeOrder
+        inputs:
+          - order_id
+        on_success: decrement_inventory
+
+    error_handling:
+      - step_id: 1
+        recovery: notify_customer_insufficient_inventory
+        action: cancel_order
+      - step_id: 2
+        recovery: cancel_order
+        action: notify_customer_system_error
+      - step_id: 3
+        recovery: offer_alternate_slots
+        action: suggest_nearby_stores
+      - step_id: 4
+        recovery: rollback_inventory
+        action: notify_customer_system_error
+
+    sla:
+      - step_id: 1
+        max_duration: 2s
+      - step_id: 2
+        max_duration: 1s
+      - step_id: 3
+        max_duration: 5s
+      - step_id: 4
+        max_duration: 3s
+      - end_to_end: 24h
+
+  - id: WF-SHIP-001
+    name: Standard Shipping Fulfillment
+    description: Complete workflow for standard shipped order processing
+    type: business_process
+    trigger:
+      event: order_created
+      condition: order.fulfillment_method == SHIPPING
+    steps:
+      - step_id: 1
+        name: Validate Inventory
+        type: validation
+        description: Check inventory availability in warehouse
+        service: InventoryService
+        operation: checkAvailability
+        inputs:
+          - product_id
+          - quantity
+          - location_id
+        outputs:
+          available: boolean
+        on_failure: notify_customer_insufficient_inventory
+
+      - step_id: 2
+        name: Reserve Inventory
+        type: reservation
+        description: Reserve inventory from warehouse
+        service: InventoryService
+        operation: reserveInventory
+        inputs:
+          - order_id
+          - product_id
+          - quantity
+          - location_id
+        outputs:
+          reservation_id: string
+        on_failure: cancel_order
+
+      - step_id: 3
+        name: Process Payment
+        type: payment
+        description: Capture payment for order
+        service: PaymentProcessingService
+        operation: capturePayment
+        inputs:
+          - order_id
+          - payment_token
+          - amount
+        outputs:
+          payment_id: string
+        on_failure: cancel_order
+
+      - step_id: 4
+        name: Route to Fulfillment Center
+        type: routing
+        description: Route order to optimal fulfillment center
+        service: OrderManagementService
+        operation: routeOrder
+        inputs:
+          - order_id
+          - shipping_address
+        outputs:
+          fulfillment_center_id: string
+
+      - step_id: 5
+        name: Pick and Pack
+        type: fulfillment
+        description: Warehouse picks and packs items
+        service: OrderManagementService
+        operation: pickAndPack
+        inputs:
+          - order_id
+        triggers:
+          event: warehouse_picked_packed
+
+      - step_id: 6
+        name: Ship Order
+        type: fulfillment
+        description: Create shipment with carrier
+        service: OrderManagementService
+        operation: createShipment
+        inputs:
+          - order_id
+          - carrier_id
+          - shipping_method
+        outputs:
+          tracking_number: string
+          estimated_delivery: timestamp
+
+      - step_id: 7
+        name: Track Shipment
+        type: monitoring
+        description: Monitor shipment status via carrier
+        service: OrderManagementService
+        operation: updateShipmentStatus
+        inputs:
+          - tracking_number
+        triggers:
+          event: carrier_status_update
+
+      - step_id: 8
+        name: Deliver and Complete
+        type: completion
+        description: Mark order as delivered
+        service: OrderManagementService
+        operation: completeOrder
+        inputs:
+          - order_id
+        on_success: decrement_inventory
+
+    error_handling:
+      - step_id: 1
+        recovery: notify_customer_insufficient_inventory
+        action: cancel_order
+      - step_id: 2
+        recovery: cancel_order
+        action: notify_customer_system_error
+      - step_id: 3
+        recovery: retry_payment
+        action: notify_customer_payment_failed
+      - step_id: 6
+        recovery: retry_shipment_creation
+        action: escalate_fulfillment_team
+
+    sla:
+      - step_id: 1
+        max_duration: 2s
+      - step_id: 2
+        max_duration: 1s
+      - step_id: 3
+        max_duration: 5s
+      - end_to_end: 72h
+
+  - id: WF-INV-001
+    name: Inventory Synchronization
+    description: Periodic synchronization of inventory across stores and warehouses
+    type: batch_process
+    trigger:
+      type: scheduled
+      schedule: "0 */4 * * *"
+    steps:
+      - step_id: 1
+        name: Pull Store Inventory
+        type: extraction
+        description: Fetch current inventory from store management systems
+        service: InventoryService
+        operation: pullStoreInventory
+
+      - step_id: 2
+        name: Pull Warehouse Inventory
+        type: extraction
+        description: Fetch current inventory from warehouse systems
+        service: InventoryService
+        operation: pullWarehouseInventory
+
+      - step_id: 3
+        name: Reconcile Inventory
+        type: transformation
+        description: Compare and reconcile inventory data
+        service: InventoryService
+        operation: reconcileInventory
+        inputs:
+          - store_inventory
+          - warehouse_inventory
+        outputs:
+          discrepancies: array
+          adjustments: array
+
+      - step_id: 4
+        name: Update Master Inventory
+        type: persistence
+        description: Update master inventory records
+        service: InventoryService
+        operation: updateMasterInventory
+        inputs:
+          - adjustments
+
+      - step_id: 5
+        name: Report Discrepancies
+        type: notification
+        description: Alert on significant inventory discrepancies
+        service: InventoryService
+        operation: reportDiscrepancies
+        inputs:
+          - discrepancies
+        condition: discrepancies.length > threshold
+
+    sla:
+      - end_to_end: 30min
+
+  - id: WF-RET-001
+    name: Order Return Processing
+    description: Process returns for both BOPIS and shipped orders
+    type: business_process
+    trigger:
+      event: return_requested
+    steps:
+      - step_id: 1
+        name: Validate Return Eligibility
+        type: validation
+        description: Check if order is eligible for return
+        service: OrderManagementService
+        operation: validateReturnEligibility
+        inputs:
+          - order_id
+          - return_reason
+        outputs:
+          eligible: boolean
+          return_window_days: integer
+
+      - step_id: 2
+        name: Create Return Authorization
+        type: authorization
+        description: Generate return authorization number
+        service: OrderManagementService
+        operation: createReturnAuthorization
+        inputs:
+          - order_id
+          - items_to_return
+        outputs:
+          return_auth_number: string
+
+      - step_id: 3
+        name: Process Return
+        type: fulfillment
+        description: Process returned items
+        service: OrderManagementService
+        operation: processReturn
+        inputs:
+          - return_auth_number
+          - returned_items
+        condition: fulfillment_method == SHIPPING
+        outputs:
+          tracking_number: string
+
+      - step_id: 4
+        name: Refund Payment
+        type: payment
+        description: Process refund to customer
+        service: PaymentProcessingService
+        operation: processRefund
+        inputs:
+          - order_id
+          - amount
+        outputs:
+          refund_id: string
+
+      - step_id: 5
+        name: Restock Inventory
+        type: inventory
+        description: Return items to inventory
+        service: InventoryService
+        operation: restockInventory
+        inputs:
+          - returned_items
+          - location_id
+        condition: items.condition == resellable
+
+      - step_id: 6
+        name: Complete Return
+        type: completion
+        description: Finalize return process
+        service: OrderManagementService
+        operation: completeReturn
+        inputs:
+          - return_auth_number
+
+    error_handling:
+      - step_id: 1
+        recovery: deny_return
+        action: notify_customer_not_eligible
+      - step_id: 4
+        recovery: manual_refund
+        action: escalate_finance_team
+
+    sla:
+      - step_id: 4
+        max_duration: 3 business_days
+      - end_to_end: 14 business_days
+
+integration_patterns:
+  - pattern: saga
+    usage: Distributed transaction management across Order, Inventory, and Payment services
+  - pattern: event_sourcing
+    usage: Order state changes for audit trail and eventual consistency
+  - pattern: circuit_breaker
+    usage: External service calls (payment gateway, shipping carriers)
+  - pattern: retry_with_backoff
+    usage: Temporary failures in inventory and payment operations
+
+notes: Workflow definitions for ecommerce domain with BOPIS and standard fulfillment support

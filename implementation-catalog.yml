@@ -1,0 +1,25 @@
+spec_name: multi-scale-routing
+spec_version: "1.0.0"
+
+work_items:
+  - work_item_id: job-ecommerce-product-catalog-001
+    api_id: TMF620
+    repo_path: services/product-catalog
+    status: planned
+
+  - work_item_id: job-ecommerce-order-management-001
+    api_id: TMF620
+    repo_path: services/order-management
+    status: planned
+
+  - work_item_id: job-ecommerce-bopis-fulfillment-001
+    api_id: TMF620
+    repo_path: services/bopis-fulfillment
+    status: planned
+
+  - work_item_id: job-ecommerce-inventory-001
+    api_id: TMF637
+    repo_path: services/inventory
+    status: planned
+
+notes: Pending SA handoff from ws-init-bopis-ecommerce. Implementation targets are planned based on domain decomposition. Repo paths and API IDs may be refined based on SA interface-contracts.

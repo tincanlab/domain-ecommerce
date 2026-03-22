@@ -1,0 +1,17 @@
+upstream_repo_url: ""
+handoff_ref: ""
+captured_at: "2026-03-22T22:47:00Z"
+solution_key: ""
+initiative_id: "init-bopis"
+workstream_id: "ws-init-bopis-ecommerce"
+reason: "Domain architecture bootstrap for BOPIS ecommerce implementation"
+notes: "Workstream artifacts delivered by domain architecture team. Updated source.yml with provenance tracking for domain initialization."
+provenance:
+  created_by: "domain-architecture"
+  created_at: "2026-03-22T22:47:00Z"
+  artifacts_delivered:
+    - "domain-design.md"
+    - "domain-design.yml"
+    - "component-specs.yml"
+    - "data-model.yml"
+    - "workflows.yml"
