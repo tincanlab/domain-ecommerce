@@ -1,0 +1,377 @@
+version: "0.1"
+
+entities:
+  - name: Product
+    type: aggregate_root
+    description: Main product entity representing items available for purchase
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: name
+        type: string
+        required: true
+      - name: description
+        type: text
+      - name: sku
+        type: string
+        required: true
+        unique: true
+      - name: price
+        type: decimal
+        required: true
+        precision: 10
+        scale: 2
+      - name: category_id
+        type: string
+        foreign_key: ProductCategory.id
+      - name: active
+        type: boolean
+        default: true
+      - name: created_at
+        type: timestamp
+        default: current_timestamp
+      - name: updated_at
+        type: timestamp
+
+  - name: ProductCategory
+    type: entity
+    description: Product categorization for catalog organization
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: name
+        type: string
+        required: true
+      - name: parent_id
+        type: string
+        foreign_key: ProductCategory.id
+      - name: description
+        type: text
+
+  - name: Order
+    type: aggregate_root
+    description: Customer order representing purchase transaction
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: customer_id
+        type: string
+        required: true
+      - name: order_date
+        type: timestamp
+        required: true
+      - name: status
+        type: enum
+        values:
+          - PENDING
+          - CONFIRMED
+          - PROCESSING
+          - READY_FOR_PICKUP
+          - COMPLETED
+          - CANCELLED
+        default: PENDING
+      - name: fulfillment_method
+        type: enum
+        values:
+          - BOPIS
+          - SHIPPING
+        required: true
+      - name: total_amount
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+      - name: tax_amount
+        type: decimal
+        precision: 10
+        scale: 2
+      - name: shipping_address
+        type: json
+      - name: pickup_store_id
+        type: string
+      - name: pickup_slot_id
+        type: string
+        foreign_key: PickupSlot.id
+
+  - name: OrderItem
+    type: entity
+    description: Individual items within an order
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: order_id
+        type: string
+        foreign_key: Order.id
+        required: true
+      - name: product_id
+        type: string
+        foreign_key: Product.id
+        required: true
+      - name: quantity
+        type: integer
+        required: true
+        min: 1
+      - name: unit_price
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+      - name: subtotal
+        type: decimal
+        precision: 10
+        scale: 2
+
+  - name: Inventory
+    type: aggregate_root
+    description: Inventory tracking across locations
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: product_id
+        type: string
+        foreign_key: Product.id
+        required: true
+      - name: location_id
+        type: string
+        required: true
+      - name: location_type
+        type: enum
+        values:
+          - STORE
+          - WAREHOUSE
+        required: true
+      - name: available_quantity
+        type: integer
+        required: true
+        min: 0
+      - name: reserved_quantity
+        type: integer
+        default: 0
+      - name: last_updated
+        type: timestamp
+
+  - name: InventoryReservation
+    type: entity
+    description: Temporary inventory holds for orders
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: order_id
+        type: string
+        foreign_key: Order.id
+        required: true
+      - name: inventory_id
+        type: string
+        foreign_key: Inventory.id
+        required: true
+      - name: quantity
+        type: integer
+        required: true
+      - name: status
+        type: enum
+        values:
+          - RESERVED
+          - CONSUMED
+          - RELEASED
+        default: RESERVED
+      - name: reserved_at
+        type: timestamp
+        default: current_timestamp
+      - name: expires_at
+        type: timestamp
+
+  - name: PickupSlot
+    type: aggregate_root
+    description: Time slots for BOPIS order pickup
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: store_id
+        type: string
+        required: true
+      - name: date
+        type: date
+        required: true
+      - name: start_time
+        type: time
+        required: true
+      - name: end_time
+        type: time
+        required: true
+      - name: capacity
+        type: integer
+        required: true
+        min: 1
+      - name: used_slots
+        type: integer
+        default: 0
+      - name: status
+        type: enum
+        values:
+          - AVAILABLE
+          - FULL
+          - PAST
+        default: AVAILABLE
+
+  - name: StoreLocation
+    type: entity
+    description: Physical store locations for BOPIS
+    attributes:
+      - name: id
+        type: string
+        required: true
+        primary_key: true
+      - name: name
+        type: string
+        required: true
+      - name: address
+        type: json
+        required: true
+      - name: phone
+        type: string
+      - name: email
+        type: string
+      - name: operating_hours
+        type: json
+      - name: bopis_enabled
+        type: boolean
+        default: true
+      - name: bopis_lead_time_hours
+        type: integer
+        default: 4
+
+relationships:
+  - from: ProductCategory
+    to: ProductCategory
+    type: self_reference
+    cardinality: one_to_many
+    description: Category hierarchy
+
+  - from: ProductCategory
+    to: Product
+    type: association
+    cardinality: one_to_many
+    description: Products belong to categories
+
+  - from: Order
+    to: OrderItem
+    type: composition
+    cardinality: one_to_many
+    cascade_delete: true
+    description: Order contains multiple items
+
+  - from: Order
+    to: PickupSlot
+    type: association
+    cardinality: many_to_one
+    nullable: true
+    description: BOPIS orders have assigned pickup slots
+
+  - from: Inventory
+    to: Product
+    type: association
+    cardinality: many_to_one
+    description: Inventory tracks product quantities
+
+  - from: InventoryReservation
+    to: Order
+    type: association
+    cardinality: many_to_one
+    description: Reservations are tied to orders
+
+  - from: InventoryReservation
+    to: Inventory
+    type: association
+    cardinality: many_to_one
+    description: Reservations hold specific inventory
+
+  - from: PickupSlot
+    to: StoreLocation
+    type: association
+    cardinality: many_to_one
+    description: Slots belong to store locations
+
+constraints:
+  - name: order_status_transition
+    type: state_machine
+    entity: Order
+    field: status
+    transitions:
+      - from: PENDING
+        to: CONFIRMED
+      - from: CONFIRMED
+        to: PROCESSING
+      - from: PROCESSING
+        to: READY_FOR_PICKUP
+        condition: fulfillment_method == BOPIS
+      - from: PROCESSING
+        to: COMPLETED
+        condition: fulfillment_method == SHIPPING
+      - from: READY_FOR_PICKUP
+        to: COMPLETED
+      - from:
+          - PENDING
+          - CONFIRMED
+          - PROCESSING
+        to: CANCELLED
+
+  - name: pickup_slot_capacity
+    type: check
+    entity: PickupSlot
+    condition: used_slots <= capacity
+
+  - name: inventory_non_negative
+    type: check
+    entity: Inventory
+    condition: available_quantity >= 0 AND reserved_quantity >= 0
+
+  - name: order_item_positive
+    type: check
+    entity: OrderItem
+    condition: quantity > 0 AND unit_price > 0
+
+indexes:
+  - name: idx_product_sku
+    table: Product
+    columns: [sku]
+    unique: true
+
+  - name: idx_order_customer
+    table: Order
+    columns: [customer_id]
+
+  - name: idx_order_status
+    table: Order
+    columns: [status]
+
+  - name: idx_order_fulfillment
+    table: Order
+    columns: [fulfillment_method, status]
+
+  - name: idx_inventory_product_location
+    table: Inventory
+    columns: [product_id, location_id]
+
+  - name: idx_reservation_order
+    table: InventoryReservation
+    columns: [order_id]
+
+  - name: idx_pickup_slot_store_date
+    table: PickupSlot
+    columns: [store_id, date]
+
+notes: Domain data model for ecommerce with BOPIS support

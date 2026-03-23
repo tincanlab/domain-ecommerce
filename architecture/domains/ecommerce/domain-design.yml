@@ -1,0 +1,461 @@
+version: "0.1"
+
+# --- Traceability context ---
+context:
+  workspace_id: ""
+  workspace_kind: "domain"
+  domain_name: "ecommerce"
+  domain_profile: "generic"
+  cascade_state:
+    requirements: ""
+    solution_architecture: ""
+    domain_architecture: "draft"
+  topology_snapshot:
+    parent_workspaces: []
+    sibling_workspaces: []
+  sa_baseline:
+    architecture_design_path: ""
+    interface_contracts_path: ""
+    component_specs_path: "architecture/domains/ecommerce/component-specs.yml"
+  generated_at: "2026-03-22T22:50:00Z"
+
+# --- Domain boundary ---
+bounded_context:
+  name: "ecommerce"
+  description: "E-commerce domain covering online shopping, catalog management, order processing, and fulfillment capabilities including BOPIS (Buy Online, Pick Up In Store)"
+  ubiquitous_language:
+    - term: "Product"
+      definition: "An item available for purchase in the catalog"
+    - term: "Order"
+      definition: "A customer's request to purchase one or more products"
+    - term: "Fulfillment"
+      definition: "The process of preparing and delivering an order to the customer"
+    - term: "BOPIS"
+      definition: "Buy Online, Pick Up In Store - a fulfillment method where customers place orders online and collect them at a physical store"
+    - term: "Store"
+      definition: "A physical retail location where products are stocked and orders can be picked up"
+    - term: "Inventory"
+      definition: "The physical stock of products available at a store or warehouse"
+  anti_corruption_layers: []
+
+# --- Domain aggregates ---
+aggregates:
+  - id: "ent-product-catalog"
+    name: "ProductCatalog"
+    description: "Manages the product catalog including product definitions, pricing, and categorization"
+    root_entity: true
+    entities:
+      - id: "ent-product"
+        name: "Product"
+        fields:
+          - name: "id"
+            type: "string"
+            required: true
+            constraints: "UUID format"
+          - name: "name"
+            type: "string"
+            required: true
+            constraints: "max 200 chars"
+          - name: "description"
+            type: "string"
+            required: false
+            constraints: "max 2000 chars"
+          - name: "sku"
+            type: "string"
+            required: true
+            constraints: "unique per product"
+          - name: "price"
+            type: "decimal"
+            required: true
+            constraints: "positive value"
+          - name: "category_id"
+            type: "string"
+            required: true
+            constraints: "references Category entity"
+          - name: "status"
+            type: "enum"
+            required: true
+            constraints: "active|inactive|discontinued"
+          - name: "created_at"
+            type: "datetime"
+            required: true
+            constraints: ""
+          - name: "updated_at"
+            type: "datetime"
+            required: true
+            constraints: ""
+        indexes:
+          - name: "idx_product_sku"
+            fields: ["sku"]
+            unique: true
+          - name: "idx_product_category"
+            fields: ["category_id"]
+          - name: "idx_product_status"
+            fields: ["status"]
+    value_objects:
+      - name: "Price"
+        fields:
+          - name: "amount"
+            type: "decimal"
+          - name: "currency"
+            type: "string"
+      - name: "Category"
+        fields:
+          - name: "id"
+            type: "string"
+          - name: "name"
+            type: "string"
+          - name: "parent_category_id"
+            type: "string"
+    domain_events:
+      - id: "evt-product-created"
+        name: "ProductCreated"
+        trigger: "state transition"
+        payload_fields:
+          - "product_id"
+          - "sku"
+          - "name"
+          - "price"
+      - id: "evt-product-updated"
+        name: "ProductUpdated"
+        trigger: "state transition"
+        payload_fields:
+          - "product_id"
+          - "updated_fields"
+      - id: "evt-product-activated"
+        name: "ProductActivated"
+        trigger: "state transition"
+        payload_fields:
+          - "product_id"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      consistency: "strong"
+      access_patterns:
+        - "Product lookup by SKU"
+        - "Product browse by category"
+        - "Product search by name/description"
+        - "Product status updates"
+    sid_alignment:
+      entity: "ProductSpecification"
+      confidence: "local_knowledge"
+
+  - id: "ent-customer-order"
+    name: "CustomerOrder"
+    description: "Manages customer orders from creation through fulfillment"
+    root_entity: true
+    entities:
+      - id: "ent-order"
+        name: "Order"
+        fields:
+          - name: "id"
+            type: "string"
+            required: true
+            constraints: "UUID format"
+          - name: "customer_id"
+            type: "string"
+            required: true
+            constraints: "references Customer"
+          - name: "order_date"
+            type: "datetime"
+            required: true
+            constraints: ""
+          - name: "fulfillment_method"
+            type: "enum"
+            required: true
+            constraints: "delivery|pickup|bopis"
+          - name: "fulfillment_store_id"
+            type: "string"
+            required: false
+            constraints: "required when fulfillment_method=bopis"
+          - name: "status"
+            type: "enum"
+            required: true
+            constraints: "pending|confirmed|ready_for_pickup|completed|cancelled|failed"
+          - name: "total_amount"
+            type: "decimal"
+            required: true
+            constraints: "positive value"
+          - name: "created_at"
+            type: "datetime"
+            required: true
+            constraints: ""
+          - name: "updated_at"
+            type: "datetime"
+            required: true
+            constraints: ""
+        indexes:
+          - name: "idx_order_customer"
+            fields: ["customer_id"]
+          - name: "idx_order_status"
+            fields: ["status"]
+          - name: "idx_order_fulfillment"
+            fields: ["fulfillment_method", "fulfillment_store_id"]
+          - name: "idx_order_date"
+            fields: ["order_date"]
+      - id: "ent-order-item"
+        name: "OrderItem"
+        fields:
+          - name: "id"
+            type: "string"
+            required: true
+            constraints: "UUID format"
+          - name: "order_id"
+            type: "string"
+            required: true
+            constraints: "references Order"
+          - name: "product_id"
+            type: "string"
+            required: true
+            constraints: "references Product"
+          - name: "quantity"
+            type: "integer"
+            required: true
+            constraints: "positive value"
+          - name: "unit_price"
+            type: "decimal"
+            required: true
+            constraints: "positive value"
+          - name: "total_price"
+            type: "decimal"
+            required: true
+            constraints: "quantity * unit_price"
+        indexes:
+          - name: "idx_orderitem_order"
+            fields: ["order_id"]
+          - name: "idx_orderitem_product"
+            fields: ["product_id"]
+    value_objects:
+      - name: "FulfillmentMethod"
+        fields:
+          - name: "type"
+            type: "enum"
+          - name: "store_id"
+            type: "string"
+      - name: "OrderTotal"
+        fields:
+          - name: "subtotal"
+            type: "decimal"
+          - name: "tax"
+            type: "decimal"
+          - name: "shipping"
+            type: "decimal"
+          - name: "total"
+            type: "decimal"
+    domain_events:
+      - id: "evt-order-created"
+        name: "OrderCreated"
+        trigger: "state transition"
+        payload_fields:
+          - "order_id"
+          - "customer_id"
+          - "fulfillment_method"
+          - "total_amount"
+      - id: "evt-order-confirmed"
+        name: "OrderConfirmed"
+        trigger: "state transition"
+        payload_fields:
+          - "order_id"
+          - "confirmation_code"
+      - id: "evt-order-ready-for-pickup"
+        name: "OrderReadyForPickup"
+        trigger: "state transition"
+        payload_fields:
+          - "order_id"
+          - "store_id"
+          - "ready_time"
+      - id: "evt-order-completed"
+        name: "OrderCompleted"
+        trigger: "state transition"
+        payload_fields:
+          - "order_id"
+          - "completion_time"
+      - id: "evt-order-cancelled"
+        name: "OrderCancelled"
+        trigger: "state transition"
+        payload_fields:
+          - "order_id"
+          - "cancellation_reason"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      consistency: "strong"
+      access_patterns:
+        - "Order lookup by ID"
+        - "Customer order history"
+        - "Store BOPIS orders"
+        - "Order status updates"
+    sid_alignment:
+      entity: "CustomerOrder"
+      confidence: "local_knowledge"
+
+  - id: "ent-store-inventory"
+    name: "StoreInventory"
+    description: "Manages inventory levels at stores and warehouses"
+    root_entity: true
+    entities:
+      - id: "ent-inventory"
+        name: "Inventory"
+        fields:
+          - name: "id"
+            type: "string"
+            required: true
+            constraints: "UUID format"
+          - name: "product_id"
+            type: "string"
+            required: true
+            constraints: "references Product"
+          - name: "store_id"
+            type: "string"
+            required: false
+            constraints: "references Store; null for warehouse"
+          - name: "warehouse_id"
+            type: "string"
+            required: false
+            constraints: "references Warehouse; null for store"
+          - name: "quantity_on_hand"
+            type: "integer"
+            required: true
+            constraints: "non-negative"
+          - name: "quantity_allocated"
+            type: "integer"
+            required: true
+            constraints: "non-negative"
+          - name: "quantity_available"
+            type: "integer"
+            required: true
+            constraints: "quantity_on_hand - quantity_allocated"
+          - name: "last_updated"
+            type: "datetime"
+            required: true
+            constraints: ""
+        indexes:
+          - name: "idx_inventory_product_store"
+            fields: ["product_id", "store_id"]
+          - name: "idx_inventory_product_warehouse"
+            fields: ["product_id", "warehouse_id"]
+          - name: "idx_inventory_store"
+            fields: ["store_id"]
+      - id: "ent-store"
+        name: "Store"
+        fields:
+          - name: "id"
+            type: "string"
+            required: true
+            constraints: "UUID format"
+          - name: "name"
+            type: "string"
+            required: true
+            constraints: "max 200 chars"
+          - name: "address"
+            type: "string"
+            required: true
+            constraints: "max 500 chars"
+          - name: "location"
+            type: "geopoint"
+            required: false
+            constraints: "latitude, longitude"
+          - name: "status"
+            type: "enum"
+            required: true
+            constraints: "active|inactive|closed"
+        indexes:
+          - name: "idx_store_status"
+            fields: ["status"]
+          - name: "idx_store_location"
+            fields: ["location"]
+    value_objects:
+      - name: "Location"
+        fields:
+          - name: "latitude"
+            type: "decimal"
+          - name: "longitude"
+            type: "decimal"
+      - name: "InventoryLevel"
+        fields:
+          - name: "on_hand"
+            type: "integer"
+          - name: "allocated"
+            type: "integer"
+          - name: "available"
+            type: "integer"
+    domain_events:
+      - id: "evt-inventory-updated"
+        name: "InventoryUpdated"
+        trigger: "state transition"
+        payload_fields:
+          - "inventory_id"
+          - "product_id"
+          - "location_id"
+          - "quantity_change"
+      - id: "evt-inventory-reserved"
+        name: "InventoryReserved"
+        trigger: "command"
+        payload_fields:
+          - "inventory_id"
+          - "order_id"
+          - "quantity"
+          - "reservation_id"
+      - id: "evt-inventory-released"
+        name: "InventoryReleased"
+        trigger: "command"
+        payload_fields:
+          - "inventory_id"
+          - "order_id"
+          - "reservation_id"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      consistency: "eventual"
+      access_patterns:
+        - "Product inventory lookup by location"
+        - "Store inventory listing"
+        - "Real-time availability check"
+        - "Inventory allocation for orders"
+    sid_alignment:
+      entity: "ResourceInventory"
+      confidence: "local_knowledge"
+
+# --- Workflows (for orchestration domains) ---
+workflows: []
+
+# --- Interface implementations ---
+interface_implementations: []
+
+# --- TMF alignment summary ---
+tmf_alignment:
+  covered_apis:
+    - api_id: "TMF620"
+      operations_covered:
+        - "Product catalog CRUD"
+        - "Product category management"
+      confidence: "local_knowledge"
+    - api_id: "TMF637"
+      operations_covered:
+        - "Product inventory management"
+        - "Store inventory queries"
+      confidence: "local_knowledge"
+  uncovered_apis: []
+  sid_mappings:
+    - domain_entity: "ent-product"
+      sid_entity: "ProductSpecification"
+      confidence: "local_knowledge"
+    - domain_entity: "ent-order"
+      sid_entity: "CustomerOrder"
+      confidence: "local_knowledge"
+    - domain_entity: "ent-inventory"
+      sid_entity: "ResourceInventory"
+      confidence: "local_knowledge"
+
+# --- Compliance ---
+compliance: []
+
+# --- Decisions ---
+decisions: []
+
+# --- Conformance report ---
+sa_conformance:
+  nfr_budget_fit: true
+  interface_conformance: []
+  pattern_conformance: []
+  issues: []

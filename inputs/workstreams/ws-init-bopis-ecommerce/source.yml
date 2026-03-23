@@ -1,8 +1,17 @@
-upstream_repo_url: https://github.com/tincanlab/solution-bopis
-handoff_ref: 7c4d2e370e526ecdffd19ad741084c2949e0b035
-captured_at: '2026-03-22T19:54:48.531526Z'
-workstream_id: ws-init-bopis-ecommerce
-solution_key: bopis
-initiative_id: init-bopis
-reason: SA handoff for Ecommerce Domain
-artifact_path: architecture/solution/domain-handoffs/ecommerce/component-specs.yml
+upstream_repo_url: ""
+handoff_ref: ""
+captured_at: "2026-03-22T22:47:00Z"
+solution_key: ""
+initiative_id: "init-bopis"
+workstream_id: "ws-init-bopis-ecommerce"
+reason: "Domain architecture bootstrap for BOPIS ecommerce implementation"
+notes: "Workstream artifacts delivered by domain architecture team. Updated source.yml with provenance tracking for domain initialization."
+provenance:
+  created_by: "domain-architecture"
+  created_at: "2026-03-22T22:47:00Z"
+  artifacts_delivered:
+    - "domain-design.md"
+    - "domain-design.yml"
+    - "component-specs.yml"
+    - "data-model.yml"
+    - "workflows.yml"

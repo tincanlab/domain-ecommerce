@@ -1,0 +1,285 @@
+version: "0.1"
+
+components:
+  - id: "comp-product-catalog"
+    name: "ProductCatalogService"
+    description: "Manages product catalog including product definitions, pricing, and categorization"
+    type: "domain_service"
+    domain: "ecommerce"
+    aggregate_roots:
+      - "ent-product-catalog"
+    api_operations:
+      - method: "POST"
+        path: "/products"
+        description: "Create a new product in the catalog"
+        request_schema: "ProductCreateRequest"
+        response_schema: "ProductResponse"
+      - method: "GET"
+        path: "/products/{id}"
+        description: "Get product details by ID"
+        request_schema: "ProductGetRequest"
+        response_schema: "ProductResponse"
+      - method: "GET"
+        path: "/products"
+        description: "Search and browse products"
+        request_schema: "ProductSearchRequest"
+        response_schema: "ProductSearchResponse"
+      - method: "PATCH"
+        path: "/products/{id}"
+        description: "Update product details"
+        request_schema: "ProductUpdateRequest"
+        response_schema: "ProductResponse"
+      - method: "DELETE"
+        path: "/products/{id}"
+        description: "Deactivate a product"
+        request_schema: "ProductDeactivateRequest"
+        response_schema: "ProductResponse"
+    internal_structure:
+      layers:
+        - name: "api_layer"
+          modules: ["ProductController", "ProductValidator"]
+        - name: "domain_layer"
+          modules: ["ProductAggregate", "ProductRepository", "ProductService"]
+        - name: "persistence_layer"
+          modules: ["ProductJpaRepository", "ProductMapper"]
+    data_access_patterns:
+      - "Repository pattern with Spring Data JPA"
+      - "Pagination support for product listing"
+      - "Caching strategy for frequently accessed products"
+    error_handling:
+      - "ProductNotFoundException (404)"
+      - "ProductAlreadyExistsException (409)"
+      - "ValidationException (400)"
+    resilience_patterns:
+      - "Circuit breaker for external category service calls"
+      - "Retry with exponential backoff for database operations"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      tables: ["product", "product_category", "product_price_history"]
+    nfrs:
+      availability: "99.9%"
+      latency_p95: "200ms"
+      throughput: "1000 requests/sec"
+    tmf_api_alignment:
+      api_id: "TMF620"
+      confidence: "local_knowledge"
+
+  - id: "comp-order-management"
+    name: "OrderManagementService"
+    description: "Manages customer orders from creation through fulfillment including BOPIS"
+    type: "domain_service"
+    domain: "ecommerce"
+    aggregate_roots:
+      - "ent-customer-order"
+    api_operations:
+      - method: "POST"
+        path: "/orders"
+        description: "Create a new customer order"
+        request_schema: "OrderCreateRequest"
+        response_schema: "OrderResponse"
+      - method: "GET"
+        path: "/orders/{id}"
+        description: "Get order details by ID"
+        request_schema: "OrderGetRequest"
+        response_schema: "OrderResponse"
+      - method: "GET"
+        path: "/orders"
+        description: "List orders with filters (customer, status, date range)"
+        request_schema: "OrderSearchRequest"
+        response_schema: "OrderSearchResponse"
+      - method: "PATCH"
+        path: "/orders/{id}/status"
+        description: "Update order status"
+        request_schema: "OrderStatusUpdateRequest"
+        response_schema: "OrderResponse"
+      - method: "POST"
+        path: "/orders/{id}/cancel"
+        description: "Cancel an order"
+        request_schema: "OrderCancelRequest"
+        response_schema: "OrderResponse"
+      - method: "POST"
+        path: "/orders/{id}/pickup-ready"
+        description: "Mark BOPIS order as ready for pickup"
+        request_schema: "OrderPickupReadyRequest"
+        response_schema: "OrderResponse"
+    internal_structure:
+      layers:
+        - name: "api_layer"
+          modules: ["OrderController", "OrderValidator"]
+        - name: "domain_layer"
+          modules: ["OrderAggregate", "OrderService", "OrderSagaOrchestrator"]
+        - name: "persistence_layer"
+          modules: ["OrderJpaRepository", "OrderItemJpaRepository", "OrderMapper"]
+        - name: "integration_layer"
+          modules: ["InventoryServiceClient", "PaymentServiceClient", "NotificationServiceClient"]
+    data_access_patterns:
+      - "Repository pattern with Spring Data JPA"
+      - "Transactional order creation with item line items"
+      - "Event publishing for order lifecycle changes"
+    error_handling:
+      - "OrderNotFoundException (404)"
+      - "OrderAlreadyExistsException (409)"
+      - "ValidationException (400)"
+      - "InventoryUnavailableException (422)"
+      - "PaymentFailedException (422)"
+    resilience_patterns:
+      - "Circuit breaker for inventory service calls"
+      - "Circuit breaker for payment service calls"
+      - "Saga pattern for order fulfillment with compensating actions"
+      - "Idempotent order creation requests"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      tables: ["orders", "order_items", "order_fulfillments"]
+    nfrs:
+      availability: "99.95%"
+      latency_p95: "300ms"
+      throughput: "500 orders/sec"
+    tmf_api_alignment:
+      api_id: "TMF622"
+      confidence: "local_knowledge"
+
+  - id: "comp-bopis-fulfillment"
+    name: "BOPISFulfillmentService"
+    description: "Manages BOPIS (Buy Online, Pick Up In Store) fulfillment including pickup slots and store coordination"
+    type: "domain_service"
+    domain: "ecommerce"
+    aggregate_roots:
+      - "ent-customer-order"
+    api_operations:
+      - method: "POST"
+        path: "/pickup-slots"
+        description: "Create a pickup slot reservation for an order"
+        request_schema: "PickupSlotCreateRequest"
+        response_schema: "PickupSlotResponse"
+      - method: "GET"
+        path: "/pickup-slots/{id}"
+        description: "Get pickup slot details"
+        request_schema: "PickupSlotGetRequest"
+        response_schema: "PickupSlotResponse"
+      - method: "GET"
+        path: "/stores/{store_id}/pickup-slots/availability"
+        description: "Get available pickup slots for a store"
+        request_schema: "PickupSlotAvailabilityRequest"
+        response_schema: "PickupSlotAvailabilityResponse"
+      - method: "PATCH"
+        path: "/pickup-slots/{id}/status"
+        description: "Update pickup slot status"
+        request_schema: "PickupSlotStatusUpdateRequest"
+        response_schema: "PickupSlotResponse"
+      - method: "POST"
+        path: "/pickup-slots/{id}/complete"
+        description: "Mark pickup as completed"
+        request_schema: "PickupCompleteRequest"
+        response_schema: "PickupSlotResponse"
+    internal_structure:
+      layers:
+        - name: "api_layer"
+          modules: ["PickupSlotController", "PickupSlotValidator"]
+        - name: "domain_layer"
+          modules: ["PickupSlotAggregate", "PickupSlotService", "PickupCapacityManager"]
+        - name: "persistence_layer"
+          modules: ["PickupSlotJpaRepository", "PickupSlotMapper"]
+        - name: "integration_layer"
+          modules: ["StoreManagementClient", "NotificationServiceClient"]
+    data_access_patterns:
+      - "Repository pattern with Spring Data JPA"
+      - "Slot capacity management with time-based queries"
+      - "Optimistic locking for slot updates"
+    error_handling:
+      - "PickupSlotNotFoundException (404)"
+      - "NoAvailablePickupSlotException (422)"
+      - "ValidationException (400)"
+      - "StoreNotAvailableException (422)"
+    resilience_patterns:
+      - "Rate limiting for slot availability queries"
+      - "Circuit breaker for store management service"
+      - "Slot expiration with automatic release"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      tables: ["pickup_slots", "pickup_reservations"]
+    nfrs:
+      availability: "99.9%"
+      latency_p95: "250ms"
+      throughput: "200 slots/sec"
+    tmf_api_alignment:
+      api_id: "TMF620"
+      confidence: "local_knowledge"
+
+  - id: "comp-inventory"
+    name: "InventoryService"
+    description: "Manages inventory levels across stores and warehouses with reservation and allocation capabilities"
+    type: "domain_service"
+    domain: "ecommerce"
+    aggregate_roots:
+      - "ent-store-inventory"
+    api_operations:
+      - method: "POST"
+        path: "/inventory"
+        description: "Create or update inventory record"
+        request_schema: "InventoryCreateRequest"
+        response_schema: "InventoryResponse"
+      - method: "GET"
+        path: "/inventory/{id}"
+        description: "Get inventory details by ID"
+        request_schema: "InventoryGetRequest"
+        response_schema: "InventoryResponse"
+      - method: "GET"
+        path: "/inventory/products/{product_id}/locations"
+        description: "Get inventory levels across all locations for a product"
+        request_schema: "InventoryLocationsRequest"
+        response_schema: "InventoryLocationsResponse"
+      - method: "POST"
+        path: "/inventory/reserve"
+        description: "Reserve inventory for an order"
+        request_schema: "InventoryReserveRequest"
+        response_schema: "InventoryReservationResponse"
+      - method: "POST"
+        path: "/inventory/reserve/{reservation_id}/release"
+        description: "Release reserved inventory"
+        request_schema: "InventoryReleaseRequest"
+        response_schema: "InventoryReservationResponse"
+      - method: "POST"
+        path: "/inventory/{id}/adjust"
+        description: "Adjust inventory levels (stock in/out)"
+        request_schema: "InventoryAdjustRequest"
+        response_schema: "InventoryResponse"
+    internal_structure:
+      layers:
+        - name: "api_layer"
+          modules: ["InventoryController", "InventoryValidator"]
+        - name: "domain_layer"
+          modules: ["InventoryAggregate", "InventoryReservationManager", "InventoryAllocator"]
+        - name: "persistence_layer"
+          modules: ["InventoryJpaRepository", "InventoryReservationJpaRepository", "InventoryMapper"]
+        - name: "integration_layer"
+          modules: ["StoreManagementClient", "WarehouseManagementClient"]
+    data_access_patterns:
+      - "Repository pattern with Spring Data JPA"
+      - "Optimistic locking for inventory updates"
+      - "Reservation tracking with expiration"
+      - "Inventory allocation strategy (store-first, warehouse-fallback)"
+    error_handling:
+      - "InventoryNotFoundException (404)"
+      - "InsufficientInventoryException (422)"
+      - "ReservationExpiredException (422)"
+      - "ValidationException (400)"
+    resilience_patterns:
+      - "Eventual consistency for inventory updates"
+      - "Retry with exponential backoff for reservation conflicts"
+      - "Inventory reconciliation process"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      tables: ["inventory", "inventory_reservations", "inventory_adjustments"]
+    nfrs:
+      availability: "99.9%"
+      latency_p95: "150ms"
+      throughput: "2000 requests/sec"
+    tmf_api_alignment:
+      api_id: "TMF637"
+      confidence: "local_knowledge"
+
+notes: Component specifications based on domain decomposition for BOPIS ecommerce. APIs, data models, and NFRs will be refined based on SA handoff interface-contracts and architecture-design.yml.
