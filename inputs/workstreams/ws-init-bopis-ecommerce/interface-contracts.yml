@@ -1,0 +1,90 @@
+version: '0.1'
+interfaces:
+- id: ifc-product-catalog-api
+  type: api
+  owner_component_id: comp-ecommerce-catalog
+  version: 0.1.0
+  spec_path: docs/reference/oas/product-catalog.oas.yaml
+  protocol: REST
+  auth: JWT
+  rate_limit: 500 rps
+  endpoints:
+  - method: GET
+    path: /api/v1/products/{sku}
+    description: Get product details by SKU
+  - method: GET
+    path: /api/v1/products/{sku}/availability
+    description: Get store-level inventory availability for product
+  - method: GET
+    path: /api/v1/stores
+    description: Get list of stores with BOPIS capability
+  - method: GET
+    path: /api/v1/stores/nearby
+    description: Get nearby stores sorted by distance
+  slo:
+    latency_p95_ms: 200
+    availability: 99.5%
+  tmf_alignment:
+    api_id: TMF620
+    confidence: mcp_verified
+  cross_workspace:
+    provider_workspace_id: ''
+    provider_domain: Ecommerce
+    consumer_workspace_ids: []
+    consumer_domains:
+    - Order
+  notes: Exposed by Ecommerce domain for Order domain and external HCL Commerce integration
+- id: ifc-inventory-sync-event
+  type: event
+  owner_component_id: comp-inventory-management
+  version: 0.1.0
+  spec_path: docs/reference/schemas/inventory-sync.avsc
+  topic: inventory.events.reservation
+  schema_format: avro
+  ordering: partition_key
+  retention: 7d
+  idempotency_key: event_id
+  payload_fields:
+  - name: event_id
+    type: string
+    required: true
+    description: Unique event identifier
+  - name: timestamp
+    type: string
+    required: true
+    description: ISO 8601 event timestamp
+  - name: event_type
+    type: string
+    required: true
+    description: RESERVED | RELEASED | ADJUSTED
+  - name: store_id
+    type: string
+    required: true
+    description: Store identifier
+  - name: product_sku
+    type: string
+    required: true
+    description: Product SKU
+  - name: quantity
+    type: int
+    required: true
+    description: Quantity reserved/released
+  - name: order_id
+    type: string
+    required: false
+    description: Associated order ID for reservations
+  tmf_alignment:
+    api_id: ''
+    confidence: unverified
+  cross_workspace:
+    provider_workspace_id: ''
+    provider_domain: Inventory
+    consumer_workspace_ids: []
+    consumer_domains:
+    - Ecommerce
+    - Order
+  notes: Event for inventory reservation/release to update channel visibility
+governance:
+  versioning: semver
+  deprecation_window: 6 months
+  breaking_change_policy: new version required; old version supported for deprecation_window
