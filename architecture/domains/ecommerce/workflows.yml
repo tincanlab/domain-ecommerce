@@ -326,6 +326,298 @@ workflows:
     sla:
       - end_to_end: 30min
 
+  - id: WF-SQ-001
+    name: Service Qualification
+    description: Check BOPIS service availability at a store location before order placement
+    type: business_process
+    trigger:
+      event: service_qualification_requested
+    etom_process: "1.2.11"
+    etom_process_name: "Product Inventory Management"
+    steps:
+      - step_id: 1
+        name: Check Store Availability
+        type: validation
+        description: Verify store is BOPIS-enabled and within operating hours
+        service: PartyManagementService
+        operation: checkStoreAvailability
+        inputs:
+          - store_id
+          - requested_date
+        outputs:
+          store_available: boolean
+          operating_hours: object
+        on_failure: suggest_alternate_stores
+
+      - step_id: 2
+        name: Check Inventory Availability
+        type: validation
+        description: Verify product inventory at selected store
+        service: InventoryService
+        operation: checkAvailability
+        inputs:
+          - product_id
+          - quantity
+          - location_id
+        outputs:
+          available: boolean
+          available_quantity: integer
+        on_failure: suggest_alternate_locations
+
+      - step_id: 3
+        name: Check Pickup Slot Availability
+        type: validation
+        description: Verify pickup slots exist for requested time window
+        service: BOPISManagementService
+        operation: checkPickupSlotAvailability
+        inputs:
+          - store_id
+          - requested_date
+          - customer_preferred_times
+        outputs:
+          slots_available: boolean
+          available_slots: array
+        on_failure: suggest_alternate_times
+
+      - step_id: 4
+        name: Return Qualification Result
+        type: completion
+        description: Aggregate qualification results and return to customer
+        service: OrderManagementService
+        operation: returnQualificationResult
+        inputs:
+          - store_available
+          - inventory_available
+          - slots_available
+          - available_slots
+        outputs:
+          qualified: boolean
+          qualification_details: object
+
+    error_handling:
+      - step_id: 1
+        recovery: suggest_alternate_stores
+        action: notify_customer_store_unavailable
+      - step_id: 2
+        recovery: suggest_alternate_locations
+        action: notify_customer_inventory_unavailable
+      - step_id: 3
+        recovery: suggest_alternate_times
+        action: notify_customer_no_slots
+
+    sla:
+      - step_id: 1
+        max_duration: 2s
+      - step_id: 2
+        max_duration: 2s
+      - step_id: 3
+        max_duration: 3s
+      - end_to_end: 10s
+
+  - id: WF-FC-001
+    name: Fulfillment Coordination
+    description: Orchestrate mixed fulfillment orders containing both BOPIS and shipping items
+    type: business_process
+    trigger:
+      event: mixed_fulfillment_order_created
+    etom_process: "1.2.27.2"
+    etom_process_name: "Manage Product Order Fulfillment"
+    steps:
+      - step_id: 1
+        name: Analyze Order Fulfillment Split
+        type: routing
+        description: Determine which items are BOPIS vs shipping
+        service: OrderManagementService
+        operation: analyzeFulfillmentSplit
+        inputs:
+          - order_id
+          - order_items
+        outputs:
+          bopis_items: array
+          shipping_items: array
+          requires_split: boolean
+
+      - step_id: 2
+        name: Reserve BOPIS Inventory
+        type: reservation
+        description: Reserve BOPIS items at selected store
+        service: InventoryService
+        operation: reserveInventory
+        inputs:
+          - order_id
+          - bopis_items
+          - store_id
+        outputs:
+          bopis_reservation_id: string
+        condition: requires_split == true
+        on_failure: fallback_to_shipping
+
+      - step_id: 3
+        name: Reserve Shipping Inventory
+        type: reservation
+        description: Reserve shipping items from warehouse
+        service: InventoryService
+        operation: reserveInventory
+        inputs:
+          - order_id
+          - shipping_items
+          - warehouse_id
+        outputs:
+          shipping_reservation_id: string
+
+      - step_id: 4
+        name: Assign BOPIS Pickup Slot
+        type: scheduling
+        description: Assign pickup slot for BOPIS items
+        service: BOPISManagementService
+        operation: assignPickupSlot
+        inputs:
+          - order_id
+          - store_id
+        outputs:
+          pickup_slot_id: string
+        condition: requires_split == true
+
+      - step_id: 5
+        name: Process Payment
+        type: payment
+        description: Capture payment for full order
+        service: PaymentService
+        operation: capturePayment
+        inputs:
+          - order_id
+          - total_amount
+        outputs:
+          payment_id: string
+        on_failure: rollback_all_reservations
+
+      - step_id: 6
+        name: Confirm Order with Split Details
+        type: notification
+        description: Send confirmation with both BOPIS and shipping details
+        service: OrderManagementService
+        operation: confirmSplitOrder
+        inputs:
+          - order_id
+          - pickup_slot_id
+          - shipping_reservation_id
+        outputs:
+          confirmation_number: string
+
+      - step_id: 7
+        name: Initiate Shipping Fulfillment
+        type: fulfillment
+        description: Begin shipping workflow for shipping items
+        service: OrderManagementService
+        operation: initiateShippingWorkflow
+        inputs:
+          - order_id
+          - shipping_items
+        condition: requires_split == true
+
+      - step_id: 8
+        name: Monitor and Reconcile
+        type: monitoring
+        description: Track both BOPIS and shipping fulfillment to completion
+        service: OrderManagementService
+        operation: monitorSplitFulfillment
+        inputs:
+          - order_id
+          - bopis_reservation_id
+          - shipping_reservation_id
+        triggers:
+          event: fulfillment_status_update
+
+    error_handling:
+      - step_id: 2
+        recovery: fallback_to_shipping
+        action: convert_bopis_to_shipping
+      - step_id: 3
+        recovery: cancel_order
+        action: notify_customer_unavailable
+      - step_id: 5
+        recovery: rollback_all_reservations
+        action: notify_customer_payment_failed
+
+    sla:
+      - step_id: 1
+        max_duration: 2s
+      - step_id: 2
+        max_duration: 2s
+      - step_id: 3
+        max_duration: 2s
+      - step_id: 5
+        max_duration: 5s
+      - end_to_end: 72h
+
+  - id: WF-SLA-001
+    name: SLA Monitoring
+    description: Monitor workflow SLA compliance and alert on breaches
+    type: monitoring_process
+    trigger:
+      type: scheduled
+      schedule: "*/5 * * * *"
+    etom_process: "1.7.10.6.1"
+    etom_process_name: "Support Fulfillment"
+    steps:
+      - step_id: 1
+        name: Collect Active Workflow Metrics
+        type: extraction
+        description: Gather current step durations for all active workflows
+        service: OrderManagementService
+        operation: collectWorkflowMetrics
+        outputs:
+          active_workflows: array
+
+      - step_id: 2
+        name: Evaluate SLA Compliance
+        type: analysis
+        description: Compare actual durations against SLA targets
+        service: OrderManagementService
+        operation: evaluateSLACompliance
+        inputs:
+          - active_workflows
+        outputs:
+          breaches: array
+          at_risk: array
+          compliant: array
+
+      - step_id: 3
+        name: Alert on Breaches
+        type: notification
+        description: Send alerts for SLA breaches
+        service: OrderManagementService
+        operation: alertSLABreach
+        inputs:
+          - breaches
+        condition: breaches.length > 0
+
+      - step_id: 4
+        name: Escalate At-Risk Workflows
+        type: escalation
+        description: Flag at-risk workflows for proactive intervention
+        service: OrderManagementService
+        operation: escalateAtRisk
+        inputs:
+          - at_risk
+        condition: at_risk.length > 0
+
+      - step_id: 5
+        name: Generate SLA Report
+        type: reporting
+        description: Produce periodic SLA compliance report
+        service: OrderManagementService
+        operation: generateSLAReport
+        inputs:
+          - breaches
+          - at_risk
+          - compliant
+        outputs:
+          report: object
+
+    sla:
+      - end_to_end: 30s
+
   - id: WF-RET-001
     name: Order Return Processing
     description: Process returns for both BOPIS and shipped orders

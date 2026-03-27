@@ -195,6 +195,10 @@ entities:
   - name: PickupSlot
     type: aggregate_root
     description: Time slots for BOPIS order pickup
+    sid_entity: null
+    domain_extension: true
+    extension_rationale: "BOPIS-specific concept for reserving pickup time slots at retail locations. Custom extension required as SID does not define retail fulfillment patterns."
+    governance_approval: "Pending EA review"
     attributes:
       - name: id
         type: string
@@ -230,6 +234,11 @@ entities:
   - name: StoreLocation
     type: entity
     description: Physical store locations for BOPIS
+    sid_entity: "UrbanPropertyAddress"
+    sid_mapping: "Maps to UrbanPropertyAddress (SID GB922) for address structure; extended with BOPIS-specific attributes (bopis_enabled, bopis_lead_time_hours, operating_hours)"
+    domain_extension: true
+    extension_rationale: "Ecommerce stores require physical location data with BOPIS-specific operational attributes not present in base SID UrbanPropertyAddress entity."
+    governance_approval: "Pending EA review"
     attributes:
       - name: id
         type: string
