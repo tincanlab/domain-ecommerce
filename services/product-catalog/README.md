@@ -12,10 +12,34 @@ Implementation of the Product Catalog domain capability for the ecommerce domain
 
 ## Implementation Details
 - **Domain Aggregate**: ProductCatalog (ent-product-catalog)
-- **Database**: PostgreSQL with JPA/Hibernate
+- **Framework**: FastAPI (Python)
+- **Database**: SQLite (development), can be configured for PostgreSQL
 - **TMF Alignment**: TMF620 Product Catalog Management
 
 ## Architecture
 See domain design for detailed specification:
 [architecture/domains/ecommerce/domain-design.yml](../../architecture/domains/ecommerce/domain-design.yml)
 [architecture/domains/ecommerce/component-specs.yml](../../architecture/domains/ecommerce/component-specs.yml)
+
+## Running Locally
+
+1. Install dependencies:
+```bash
+cd services/product-catalog
+pip install -r requirements.txt
+```
+
+2. Run the server:
+```bash
+uvicorn app.main:app --reload
+```
+
+3. The service will be available at http://localhost:8000
+   - Health checks: http://localhost:8000/health/liveness, http://localhost:8000/health/readiness
+   - API docs: http://localhost:8000/docs
+   - Product Offering endpoints: GET/POST/PATCH/DELETE `/productOffering/{id}`
+
+4. Run tests:
+```bash
+pytest tests/ -v
+```
