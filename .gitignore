@@ -1,0 +1,25 @@
+# Environments
+.env*
+!.env*.example
+
+opencode.json.template
+auth.json.template
+
+# Cache and local state
+__pycache__/
+.ruff_cache/
+node_modules/
+.opencode/skills/
+.DS_Store
+.vscode/
+.idea/
+
+# Binaries and large files
+*.zip
+*.bak
+.tmp/
+
+# SQLite databases
+*.db
+*.db-wal
+*.db-shm

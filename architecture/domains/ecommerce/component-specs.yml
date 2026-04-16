@@ -205,8 +205,10 @@ components:
       latency_p95: "250ms"
       throughput: "200 slots/sec"
     tmf_api_alignment:
-      api_id: "TMF620"
+      api_id: "TMF622"
+      oda_component: "TMFC003"
       confidence: "local_knowledge"
+      notes: "Primary API is TMF622 (ProductOrdering) for order lifecycle management during fulfillment; TMF620 used for product lookups supporting pickup slot operations"
 
   - id: "comp-inventory"
     name: "InventoryService"
@@ -281,5 +283,147 @@ components:
     tmf_api_alignment:
       api_id: "TMF637"
       confidence: "local_knowledge"
+
+  - id: "comp-party-management"
+    name: "PartyManagementService"
+    description: "Manages customer, partner, and third-party profiles, addresses, preferences, and consent"
+    type: "domain_service"
+    domain: "ecommerce"
+    aggregate_roots:
+      - "ent-party"
+    api_operations:
+      - method: "GET"
+        path: "/parties"
+        description: "List all parties with optional filters"
+        request_schema: "PartyListRequest"
+        response_schema: "PartyListResponse"
+        tmf_api: "TMF622"
+      - method: "GET"
+        path: "/parties/{id}"
+        description: "Get party details by ID"
+        request_schema: "PartyGetRequest"
+        response_schema: "PartyGetResponse"
+        tmf_api: "TMF622"
+      - method: "POST"
+        path: "/parties"
+        description: "Create a new party (customer or partner)"
+        request_schema: "PartyCreateRequest"
+        response_schema: "PartyResponse"
+        tmf_api: "TMF622"
+      - method: "PATCH"
+        path: "/parties/{id}"
+        description: "Update party details"
+        request_schema: "PartyUpdateRequest"
+        response_schema: "PartyResponse"
+        tmf_api: "TMF622"
+      - method: "GET"
+        path: "/parties/{id}/addresses"
+        description: "Get party addresses"
+        request_schema: "PartyAddressListRequest"
+        response_schema: "PartyAddressListResponse"
+        tmf_api: "TMF622"
+    internal_structure:
+      layers:
+        - name: "api_layer"
+          modules: ["PartyController", "PartyValidator"]
+        - name: "domain_layer"
+          modules: ["PartyAggregate", "PartyService", "AddressService"]
+        - name: "persistence_layer"
+          modules: ["PartyJpaRepository", "PartyAddressJpaRepository", "PartyMapper"]
+    data_access_patterns:
+      - "Repository pattern with Spring Data JPA"
+      - "Address validation via geocoding service"
+      - "Customer profile enrichment from order history"
+    error_handling:
+      - "PartyNotFoundException (404)"
+      - "DuplicatePartyException (409)"
+      - "InvalidAddressException (400)"
+      - "ValidationException (400)"
+    resilience_patterns:
+      - "Circuit breaker for geocoding service calls"
+      - "Retry with exponential backoff for address validation"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      tables: ["party", "party_address", "party_contact_medium"]
+    nfrs:
+      availability: "99.9%"
+      latency_p95: "200ms"
+      throughput: "1500 requests/sec"
+    tmf_api_alignment:
+      api_id: "TMF622"
+      oda_component: "TMFC028"
+      confidence: "local_knowledge"
+      notes: "TMFC028 (PartyManagement) via TMF622 party-related endpoints. Manages customer lifecycle including profiles, addresses, and consent."
+
+  - id: "comp-payment"
+    name: "PaymentService"
+    description: "Handles payment capture, validation, authorization, and refund processing for orders"
+    type: "domain_service"
+    domain: "ecommerce"
+    aggregate_roots:
+      - "ent-payment"
+    api_operations:
+      - method: "POST"
+        path: "/payments"
+        description: "Create and capture a payment for an order"
+        request_schema: "PaymentCreateRequest"
+        response_schema: "PaymentResponse"
+        tmf_api: "TMF669"
+      - method: "GET"
+        path: "/payments/{id}"
+        description: "Get payment details by ID"
+        request_schema: "PaymentGetRequest"
+        response_schema: "PaymentResponse"
+        tmf_api: "TMF669"
+      - method: "POST"
+        path: "/payments/{id}/refund"
+        description: "Process a partial or full refund"
+        request_schema: "PaymentRefundRequest"
+        response_schema: "PaymentRefundResponse"
+        tmf_api: "TMF669"
+      - method: "PATCH"
+        path: "/payments/{id}/status"
+        description: "Update payment status (e.g., authorized, captured, failed)"
+        request_schema: "PaymentStatusUpdateRequest"
+        response_schema: "PaymentResponse"
+        tmf_api: "TMF669"
+    internal_structure:
+      layers:
+        - name: "api_layer"
+          modules: ["PaymentController", "PaymentValidator"]
+        - name: "domain_layer"
+          modules: ["PaymentAggregate", "PaymentService", "RefundService"]
+        - name: "persistence_layer"
+          modules: ["PaymentJpaRepository", "PaymentTransactionJpaRepository", "PaymentMapper"]
+        - name: "integration_layer"
+          modules: ["PaymentGatewayClient", "FraudDetectionClient"]
+    data_access_patterns:
+      - "Repository pattern with Spring Data JPA"
+      - "Idempotent payment processing"
+      - "Transaction logging for audit compliance"
+    error_handling:
+      - "PaymentNotFoundException (404)"
+      - "PaymentFailedException (422)"
+      - "InsufficientFundsException (422)"
+      - "FraudDetectedException (403)"
+      - "ValidationException (400)"
+    resilience_patterns:
+      - "Circuit breaker for payment gateway"
+      - "Saga compensation for order-payment rollback"
+      - "Idempotency key enforcement for duplicate prevention"
+    storage:
+      type: "relational"
+      technology: "PostgreSQL"
+      tables: ["payment", "payment_transaction", "payment_refund"]
+    nfrs:
+      availability: "99.99%"
+      latency_p95: "500ms"
+      throughput: "300 payments/sec"
+    tmf_api_alignment:
+      api_id: "TMF669"
+      oda_component: "TMFC009"
+      confidence: "local_knowledge"
+      notes: "TMFC009 (PaymentManagement) via TMF669 (Payment). Integrates with external payment gateways for capture, authorization, and refunds."
 
 notes: Component specifications based on domain decomposition for BOPIS ecommerce. APIs, data models, and NFRs will be refined based on SA handoff interface-contracts and architecture-design.yml.

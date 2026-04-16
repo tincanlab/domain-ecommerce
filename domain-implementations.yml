@@ -1,4 +1,74 @@
+# Domain implementations catalog (YAML canonical)
+# Authoritative routing source for the ecommerce domain (tmfc001)
+# Converted from legacy implementation-catalog.yml
+
 spec_name: multi-scale-routing
 spec_version: "1.0.0"
 
-implementations: []
+implementations:
+
+  # Product Catalog implementation - implements TMF620 Product Catalog Management API
+  - implementation_id: product-catalog-service
+    status: active
+    repo:
+      paths: ["services/product-catalog/**"]
+      entrypoint: services/product-catalog/README.md
+    # traceability
+    legacy_work_item_id: job-ecommerce-product-catalog-001
+    tmf_api: TMF620
+    owners: [ecommerce-domain]
+
+  # Order Management implementation - implements TMF622 Product Order Management API
+  - implementation_id: order-management-service
+    status: active
+    repo:
+      paths: ["services/order-management/**"]
+      entrypoint: services/order-management/README.md
+    # traceability
+    legacy_work_item_id: job-ecommerce-order-management-001
+    tmf_api: TMF622
+    owners: [ecommerce-domain]
+
+  # BOPIS Fulfillment implementation - extends TMF622 Order Management with BOPIS capabilities
+  - implementation_id: bopis-fulfillment-service
+    status: active
+    repo:
+      paths: ["services/bopis-fulfillment/**"]
+      entrypoint: services/bopis-fulfillment/README.md
+    # traceability
+    legacy_work_item_id: job-ecommerce-bopis-fulfillment-001
+    tmf_api: TMF622
+    owners: [ecommerce-domain]
+
+  # Inventory Management implementation - implements TMF637 Product Inventory Management API
+  - implementation_id: inventory-service
+    status: active
+    repo:
+      paths: ["services/inventory/**"]
+      entrypoint: services/inventory/README.md
+    # traceability
+    legacy_work_item_id: job-ecommerce-inventory-001
+    tmf_api: TMF637
+    owners: [ecommerce-domain]
+
+  # Party Management implementation - implements TMF622 Party Management via TMFC028
+  - implementation_id: party-management-service
+    status: active
+    repo:
+      paths: ["services/party-management/**"]
+      entrypoint: services/party-management/README.md
+    # traceability
+    tmf_api: TMF622
+    tmf_component: TMFC028
+    owners: [ecommerce-domain]
+
+  # Payment Management implementation - implements TMF669 Payment API via TMFC009
+  - implementation_id: payment-service
+    status: active
+    repo:
+      paths: ["services/payment/**"]
+      entrypoint: services/payment/README.md
+    # traceability
+    tmf_api: TMF669
+    tmf_component: TMFC009
+    owners: [ecommerce-domain]
